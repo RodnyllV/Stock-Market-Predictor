@@ -1,7 +1,7 @@
 import numpy
 import pandas
+import requests
 import matplotlib.pyplot as pyPlot
-import seaborn
 import os
 
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = '0'
@@ -16,15 +16,35 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings("ignore")
 
+# Ask the user for the company stock
+ticker = input("Enter a stock to predict: ")
+
+# Set up the URL
+# API KEY - 5FDGVWUH1D95L529
+url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&outputsize=full&apikey=5FDGVWUH1D95L529'
+req = requests.get(url)
+dataJSON = req.json()
+
+# Create a dataframe from the alphavantage URL
+stockData = pandas.DataFrame(dataJSON.get("Time Series (Daily)")).transpose()
+stockData.index.name = "date"
+stockData.columns = ["open", "high", "low", "close", "volume"]
+stockData = stockData.sort_index()
+stockData.reset_index(inplace = True)
+
 # Get data
 teslaDF = pandas.read_csv("project/data/tesla.csv")
-teslaDF = teslaDF.iloc[::-1]
-teslaDF["date"] = pandas.to_datetime(teslaDF["date"])
+# teslaDF = teslaDF.iloc[::-1]
+stockData["date"] = pandas.to_datetime(stockData["date"])
 
-predictionRange = teslaDF.loc[(teslaDF["date"] > datetime(2015, 1, 1)) & (teslaDF["date"] < datetime(2018, 1, 1))] 
-closeData = teslaDF.filter(["close"])
+predictionRange = stockData.loc[(stockData["date"] > datetime(2020, 1, 1)) & (stockData["date"] < datetime(2025, 1, 1))] 
+closeData = stockData.filter(["close"])
 dataSet = closeData.values
 trainingDataLength = int(numpy.ceil(len(dataSet) * 0.95))
+
+for column in stockData.columns:
+    if column != "date":
+        stockData[column] = pandas.to_numeric(stockData[column])
 
 # Scale the data
 scaler = MinMaxScaler(feature_range = (0, 1))
@@ -70,16 +90,16 @@ xTest = numpy.reshape(xTest, (xTest.shape[0], xTest.shape[1], 1))
 predictions = scaler.inverse_transform(trainingModel.predict(xTest))
 
 # Graph the predictions
-train = teslaDF[:trainingDataLength]
-test = teslaDF[trainingDataLength:]
+train = stockData[:trainingDataLength]
+test = stockData[trainingDataLength:]
 test["predictions"] = predictions
 
 pyPlot.figure(figsize = (10, 8))
-pyPlot.plot(train['date'], train['close'])
-pyPlot.plot(test['date'], test[['close', 'predictions']])
-pyPlot.title("Tesla Stock Closing Price")
+pyPlot.plot(train["date"], train["close"])
+pyPlot.plot(test["date"], test[["close", "predictions"]])
+pyPlot.title(ticker + " Stock Closing Price w/ Predictions")
 pyPlot.xlabel("Date")
-pyPlot.ylabel("Close")
+pyPlot.ylabel("$USD")
 pyPlot.legend(["Train", "Test", "Predictions"])
 
 pyPlot.show()
